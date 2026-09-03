@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <base target="_top"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>QRコード表示</title>
+  <style>*{box-sizing:border-box}body{margin:0;padding:16px;background:#f7f7f8;color:#1b1b1f;font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif}.card{max-width:600px;margin:0 auto;padding:20px;border-radius:12px;background:#fff;box-shadow:0 1px 4px #0000001a}h1{margin:0 0 12px;font-size:18px}#result{min-height:80px;margin:0;padding:12px;overflow-wrap:anywhere;border:1px solid #ddd;border-radius:8px;background:#fafafa;white-space:pre-wrap}#status{margin:10px 0 0;color:#696e77;font-size:13px}#status.error{color:#e5484d}</style>
+</head>
+<body>
+  <main class="card"><h1>読み取ったQRコード</h1><pre id="result">まだ読み取られていません。</pre><p id="status" role="status">QRコードを待っています。</p></main>
+  <script>
+    "use strict";
+    const ALLOWED_PARENT_ORIGIN=<?!= JSON.stringify(allowedParentOrigin) ?>,MESSAGE_SOURCE="qr-code-sample",resultElement=document.getElementById("result"),statusElement=document.getElementById("status");
+    // HtmlServiceは利用者のHTMLを二重のiframeで配信するため、埋め込み元は window.parent（中間フレーム）ではなく window.top。
+    const hostWindow=window.top!==window?window.top:null;
+    window.addEventListener("message",event=>{
+      if(event.source!==hostWindow||event.origin!==ALLOWED_PARENT_ORIGIN)return;
+      const message=event.data;if(!message||message.source!==MESSAGE_SOURCE||message.type!=="QR_SCANNED")return;
+      const qrText=message.payload&&message.payload.text;if(typeof qrText!=="string"){showError("QRコードの値が不正です。");return}
+      statusElement.classList.remove("error");statusElement.textContent="GASへ送信しています…";
+      google.script.run.withSuccessHandler(result=>{resultElement.textContent=result.text;statusElement.textContent="GASで受信しました: "+result.receivedAt;notifyParent(true)}).withFailureHandler(error=>{const text=error&&error.message?error.message:"GASでの処理に失敗しました。";showError(text);notifyParent(false,text)}).receiveQrText(qrText);
+    });
+    function showError(message){statusElement.classList.add("error");statusElement.textContent=message}
+    function notifyParent(ok,message){if(hostWindow)hostWindow.postMessage({source:MESSAGE_SOURCE,type:"QR_RESULT",ok:ok,message:message||""},ALLOWED_PARENT_ORIGIN)}
+    if(hostWindow)hostWindow.postMessage({source:MESSAGE_SOURCE,type:"GAS_READY"},ALLOWED_PARENT_ORIGIN);
+    else showError("このページは読み取り画面のiframe内で開いてください。");
+  </script>
+</body>
+</html>

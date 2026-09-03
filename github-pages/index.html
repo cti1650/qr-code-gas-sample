@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <title>QRコード読み取り</title>
+  <style>
+    *{box-sizing:border-box}body{margin:0;background:#f7f7f8;color:#1b1b1f;font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif}
+    .scanner{padding:16px;background:#fff;border-bottom:1px solid #ddd}#qr-reader{display:none;width:100%;max-width:600px;margin:0 auto;overflow:hidden;border-radius:8px}.scanner.active #qr-reader{display:block}
+    #status{max-width:600px;min-height:20px;margin:10px auto;color:#696e77;font-size:13px}#toggle{display:block;width:min(600px,100%);margin:0 auto;padding:12px;border:0;border-radius:8px;background:#4884da;color:#fff;font-size:16px;cursor:pointer}#toggle:disabled{opacity:.5;cursor:not-allowed}
+    #gas-app{display:block;width:100%;height:400px;border:0}
+  </style>
+</head>
+<body>
+  <section id="scanner" class="scanner">
+    <div id="qr-reader"></div>
+    <p id="status" role="status">表示画面を読み込んでいます…</p>
+    <button id="toggle" type="button" disabled>QRスキャンを開始</button>
+  </section>
+  <iframe id="gas-app" title="QRコード表示"></iframe>
+  <script src="config.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js" integrity="sha256-ZgsSQ3sddH4+aLi+BoXAjLcoFAEQrSE/FnsUtm+LHY4=" crossorigin="anonymous"></script>
+  <script>
+    "use strict";
+    const MESSAGE_SOURCE="qr-code-sample",REQUIRED_MATCHES=3;
+    const iframe=document.getElementById("gas-app"),scannerElement=document.getElementById("scanner"),readerElement=document.getElementById("qr-reader"),toggleButton=document.getElementById("toggle"),statusElement=document.getElementById("status");
+    let qrScanner=null,scanning=false,starting=false,gasOrigin=null,gasWindow=null,candidateValue="",matchCount=0,submitted=false;
+    const gasWebAppUrl=resolveGasWebAppUrl();
+    if(gasWebAppUrl)iframe.src=gasWebAppUrl;
+    else statusElement.textContent="GASのWebアプリURLが設定されていません。config.js の gasWebAppUrl を設定してください。";
+    window.addEventListener("message",event=>{
+      if(!isAllowedGasOrigin(event.origin)||!isFrameOfThisPage(event.source))return;
+      const message=event.data;if(!message||message.source!==MESSAGE_SOURCE)return;
+      if(message.type==="GAS_READY"){gasOrigin=event.origin;gasWindow=event.source;toggleButton.disabled=false;statusElement.textContent="QRスキャンを開始できます。"}
+      if(message.type==="QR_RESULT")statusElement.textContent=message.ok?"GASで受信しました。":message.message||"処理に失敗しました。";
+    });
+    toggleButton.addEventListener("click",()=>scanning?stopScanning():startScanning());
+    // start()はカメラ起動の完了まで待つため、その間の二度押しで
+    // 同じ要素へ2つ目のインスタンスが描画されないよう starting で門番する。
+    async function startScanning(){
+      if(!gasOrigin||!gasWindow||qrScanner||starting)return;
+      starting=true;toggleButton.disabled=true;
+      candidateValue="";matchCount=0;submitted=false;
+      readerElement.replaceChildren();
+      scannerElement.classList.add("active");
+      const scanner=new Html5Qrcode("qr-reader");
+      try{
+        await scanner.start({facingMode:"environment"},{fps:10,qrbox:{width:250,height:250}},handleScan,()=>{});
+        qrScanner=scanner;scanning=true;
+        toggleButton.textContent="QRスキャンを停止";statusElement.textContent="QRコードをカメラに映してください。";
+      }catch(error){
+        try{scanner.clear()}catch(_){}
+        readerElement.replaceChildren();
+        scannerElement.classList.remove("active");
+        statusElement.textContent="カメラを起動できませんでした: "+String(error);
+      }finally{starting=false;toggleButton.disabled=false}
+    }
+    // 参照を先に手放して再入時は即return。stop()が要素を残した場合に備え最後にDOMを空にする。
+    async function stopScanning(keepStatus){
+      const scanner=qrScanner;if(!scanner)return;
+      qrScanner=null;scanning=false;
+      try{await scanner.stop()}catch(_){}
+      try{scanner.clear()}catch(_){}
+      readerElement.replaceChildren();
+      scannerElement.classList.remove("active");
+      toggleButton.textContent="QRスキャンを開始";
+      if(!keepStatus)statusElement.textContent="QRスキャンを停止しました。";
+    }
+    // 同じ値を REQUIRED_MATCHES 回連続で検知したら1度だけ送信してスキャンを止める。
+    // 違う値を検知したらカウントをやり直す（誤読の取りこぼし防止）。
+    function handleScan(decodedText){
+      if(submitted)return;
+      if(decodedText===candidateValue)matchCount++;else{candidateValue=decodedText;matchCount=1}
+      if(matchCount<REQUIRED_MATCHES){statusElement.textContent="読み取り確認中… ("+matchCount+"/"+REQUIRED_MATCHES+")";return}
+      submitted=true;
+      gasWindow.postMessage({source:MESSAGE_SOURCE,type:"QR_SCANNED",payload:{text:decodedText}},gasOrigin);
+      statusElement.textContent="GASへ送信しています…";
+      setTimeout(()=>stopScanning(true),0); // スキャンループの外へ出してから停止する
+    }
+    function resolveGasWebAppUrl(){
+      const url=String((window.APP_CONFIG&&window.APP_CONFIG.gasWebAppUrl)||"").trim();
+      if(!url||url.indexOf("__")===0)return "";
+      return isAllowedGasOrigin(url)?url:"";
+    }
+    // HtmlServiceは二重iframeで配信されるため、送信元は iframe.contentWindow ではなく内側フレーム。
+    // 直接参照できないので、オリジン許可リストと「自ページ配下のフレームか」で検証する。
+    function isFrameOfThisPage(source){try{return !!source&&source!==window&&source.top===window.top}catch(_){return false}}
+    function isAllowedGasOrigin(origin){try{const url=new URL(origin);return url.protocol==="https:"&&(url.hostname==="script.google.com"||url.hostname==="script.googleusercontent.com"||url.hostname.endsWith(".googleusercontent.com"))}catch(_){return false}}
+  </script>
+</body>
+</html>

@@ -1,0 +1,5 @@
+# macOS
+.DS_Store
+
+# ローカル動作確認で config.js を書き換えた場合の控え
+github-pages/config.local.js
