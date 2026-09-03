@@ -15,6 +15,38 @@ GitHub Pagesで読み取った文字列はiframeへ`postMessage`で渡り、`goo
 
 回数は`github-pages/index.html`の`REQUIRED_MATCHES`で変更できます。
 
+## アクセス制限（パスワード）
+
+Google認証はiframeでは使えません。認証が必要な設定だとGASが`accounts.google.com`へ
+リダイレクトし、そのログイン画面が`X-Frame-Options: DENY`を返すためです。PCで動いても
+iOS Safari等はサードパーティCookieをブロックするため、スマホでは必ず失敗します。
+
+そのためデプロイのアクセス権は**「全員」**にしたうえで、アプリ独自のパスワードで保護します。
+
+1. GASエディタの **プロジェクトの設定 > スクリプト プロパティ** で
+   `APP_PASSWORD` に任意のパスワードを設定します。
+2. **デプロイ > デプロイを管理 > 鉛筆アイコン > アクセスできるユーザー: 全員** にします。
+   「Googleアカウントを持つ全員」では動きません。
+
+利用者はGitHub Pagesの画面でパスワードを入力します。値は`sessionStorage`に保持され、
+タブを閉じると消えます。
+
+### 設計上の要点
+
+- **照合はGAS側（`receiveQrText`）で行います。** クライアントJSでの判定はDevToolsで
+  迂回できるため、サーバー側でしか意味がありません。
+- パスワードはソースに埋め込まず利用者が入力するため、公開リポジトリに置いても漏れません。
+- `APP_PASSWORD`が未設定の場合は`throw`します（フェイルクローズ）。
+
+### 制限事項
+
+- **総当たり攻撃を防げません。** GASは`doGet`/`google.script.run`でクライアントIPを
+  取得できないため、IP単位のレート制限を実装できません。全体でカウントする方式は
+  攻撃者による締め出し（DoS）を招くので採用していません。**十分に長いランダムな
+  パスワードを設定してください。**
+- 守れるのは`receiveQrText`の実行だけです。`doGet`（iframe内の画面表示）自体は
+  誰でも到達できます。ただし表示されるのは空の受信待ち画面のみです。
+
 ## GitHub Pagesオリジンの設定（GAS側）
 
 GAS側は`GITHUB_PAGES_ORIGIN`をスクリプトプロパティから読み、`doGet()`が
@@ -85,7 +117,7 @@ python3 -m http.server 8000 --directory github-pages
 | `github-pages/config.js` | `window.APP_CONFIG.gasWebAppUrl`を定義。既定値はプレースホルダ`__GAS_WEB_APP_URL__` |
 | `.github/workflows/deploy-pages.yml` | プレースホルダを`vars.GAS_WEB_APP_URL`へ置換してPagesへデプロイ |
 | `github-pages/index.html` | `config.js`のURLを検証してからiframeの`src`に設定 |
-| `gas/Code.gs` | スクリプトプロパティ`GITHUB_PAGES_ORIGIN`を検証してテンプレートへ渡す |
+| `gas/Code.gs` | スクリプトプロパティ`GITHUB_PAGES_ORIGIN`を検証してテンプレートへ渡す。`APP_PASSWORD`を照合 |
 | `gas/Index.html` | `<?!= JSON.stringify(allowedParentOrigin) ?>`で受け取り送信元を検証 |
 
 #### iframeの二重構造について
@@ -117,4 +149,6 @@ iframeへ設定します。未設定・不正な場合はiframeを読み込ま�
 | `Unexpected token '<'` | 新`Index.html`に対し`Code.gs`が旧いまま（スクリプトレット未評価） | `Code.gs`も更新してバージョンを上げる |
 | iframeにGASのエラーページが出る | スクリプトプロパティが未設定または書式不正 | エラーページの本文に原因が表示されます |
 | 「GASのWebアプリURLが設定されていません」 | `config.js`が未置換、またはURLが`script.google.com`以外 | リポジトリ変数`GAS_WEB_APP_URL`を確認 |
+| `パスワードが違います。` | 入力値と`APP_PASSWORD`の不一致 | スクリプトプロパティの値を確認 |
+| iframe内が401 / ログイン画面が出ない | アクセス権が「全員」以外 | デプロイ設定を「全員」に変更 |
 | スキャンしても何も起きない | 親オリジンの不一致で`postMessage`が破棄されている | `GITHUB_PAGES_ORIGIN`が実際のオリジンと完全一致か確認 |

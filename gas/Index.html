@@ -14,9 +14,10 @@
     window.addEventListener("message",event=>{
       if(event.source!==hostWindow||event.origin!==ALLOWED_PARENT_ORIGIN)return;
       const message=event.data;if(!message||message.source!==MESSAGE_SOURCE||message.type!=="QR_SCANNED")return;
-      const qrText=message.payload&&message.payload.text;if(typeof qrText!=="string"){showError("QRコードの値が不正です。");return}
+      const payload=message.payload||{},qrText=payload.text,password=payload.password;
+      if(typeof qrText!=="string"){showError("QRコードの値が不正です。");return}
       statusElement.classList.remove("error");statusElement.textContent="GASへ送信しています…";
-      google.script.run.withSuccessHandler(result=>{resultElement.textContent=result.text;statusElement.textContent="GASで受信しました: "+result.receivedAt;notifyParent(true)}).withFailureHandler(error=>{const text=error&&error.message?error.message:"GASでの処理に失敗しました。";showError(text);notifyParent(false,text)}).receiveQrText(qrText);
+      google.script.run.withSuccessHandler(result=>{resultElement.textContent=result.text;statusElement.textContent="GASで受信しました: "+result.receivedAt;notifyParent(true)}).withFailureHandler(error=>{const text=error&&error.message?error.message:"GASでの処理に失敗しました。";showError(text);notifyParent(false,text)}).receiveQrText(qrText,typeof password==="string"?password:"");
     });
     function showError(message){statusElement.classList.add("error");statusElement.textContent=message}
     function notifyParent(ok,message){if(hostWindow)hostWindow.postMessage({source:MESSAGE_SOURCE,type:"QR_RESULT",ok:ok,message:message||""},ALLOWED_PARENT_ORIGIN)}
