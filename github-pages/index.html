@@ -91,7 +91,7 @@
     function closeSettings(){settingsModal.classList.remove("open");saveSettings();toggleButton.focus()}
     settingsModal.addEventListener("click",e=>{if(e.target===settingsModal)closeSettings()});
     continuousToggle.addEventListener("click",()=>{continuousMode=!continuousMode;updateContinuousToggle();saveSettings()});
-    settingsPassword.addEventListener("change",saveSettings);
+    settingsPassword.addEventListener("change",()=>{saveSettings();gasReady=false;updateToggleState();iframe.src=withParentOrigin(gasWebAppUrl)});
 
     loadSettings();
     const gasWebAppUrl=resolveGasWebAppUrl();
