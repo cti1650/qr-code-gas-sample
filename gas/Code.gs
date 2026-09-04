@@ -61,6 +61,8 @@ function receiveQrText(qrText, password) {
   if (typeof qrText !== 'string') throw new Error('QRコードの値が文字列ではありません。');
   const normalizedText = qrText.trim();
   if (!normalizedText) throw new Error('QRコードの値が空です。');
+  // テスト用：ERROR-TEST は意図的にエラーを発生させる
+  if (normalizedText === 'ERROR-TEST') throw new Error('このQRコードはエラーテスト用です。');
   return {
     text: normalizedText,
     receivedAt: Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy/MM/dd HH:mm:ss')
