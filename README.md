@@ -19,6 +19,37 @@ QRコードをカメラで読み取り、Google Apps Script で処理・表示�
 - オリジン検証
 - 複数環境対応（本番 + ローカル開発）
 
+## システム構成
+
+```mermaid
+graph LR
+  A["GitHub Pages<br/>(QRコード読み取り)"]
+  B["GAS WebApp<br/>(パスコード検証・処理)"]
+  A -->|iframe| B
+  A -->|postMessage| B
+  B -->|postMessage| A
+```
+
+## 読み取りフロー
+
+```mermaid
+sequenceDiagram
+  participant User
+  participant Page as GitHub Pages
+  participant GAS as Google Apps Script
+  User->>Page: ①パスコード入力
+  User->>Page: ②QRスキャン開始
+  Page->>Page: ③同一値3回確認
+  Page->>GAS: ④QRテキスト+パスコード送信
+  GAS->>GAS: ⑤パスコード検証
+  GAS->>Page: ⑥結果を返却
+  Page->>Page: ⑦効果音再生
+  opt 連続読み込みモード
+    Page->>Page: 3秒待機
+    Page->>Page: ②へ戻る
+  end
+```
+
 ## 動作確認
 
 以下のテスト用QRコードで効果音の動作確認ができます。
