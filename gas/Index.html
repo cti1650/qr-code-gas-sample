@@ -21,8 +21,11 @@
     });
     function showError(message){statusElement.classList.add("error");statusElement.textContent=message}
     function notifyParent(ok,message){if(hostWindow)hostWindow.postMessage({source:MESSAGE_SOURCE,type:"QR_RESULT",ok:ok,message:message||""},ALLOWED_PARENT_ORIGIN)}
-    if(hostWindow)hostWindow.postMessage({source:MESSAGE_SOURCE,type:"GAS_READY"},ALLOWED_PARENT_ORIGIN);
-    else showError("このページは読み取り画面のiframe内で開いてください。");
+    // ALLOWED_PARENT_ORIGINは、埋め込み元が名乗ったオリジンをGAS側が許可リストと
+    // 照合した結果。該当なしの場合は空文字で届くため、送信せずエラーを表示する。
+    if(!hostWindow)showError("このページは読み取り画面のiframe内で開いてください。");
+    else if(!ALLOWED_PARENT_ORIGIN)showError("このページを埋め込んでいるオリジンは許可されていません。スクリプトプロパティ GITHUB_PAGES_ORIGIN を確認してください。");
+    else hostWindow.postMessage({source:MESSAGE_SOURCE,type:"GAS_READY"},ALLOWED_PARENT_ORIGIN);
   </script>
 </body>
 </html>

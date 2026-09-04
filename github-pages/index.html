@@ -31,7 +31,7 @@
     passwordElement.value=sessionStorage.getItem("qrPassword")||"";
     passwordElement.addEventListener("input",()=>{sessionStorage.setItem("qrPassword",passwordElement.value);updateToggleState()});
     const gasWebAppUrl=resolveGasWebAppUrl();
-    if(gasWebAppUrl)iframe.src=gasWebAppUrl;
+    if(gasWebAppUrl)iframe.src=withParentOrigin(gasWebAppUrl);
     else statusElement.textContent="GASのWebアプリURLが設定されていません。";
     window.addEventListener("message",event=>{
       if(!isAllowedGasOrigin(event.origin)||!isFrameOfThisPage(event.source))return;
@@ -88,6 +88,9 @@
       const url=String((window.APP_CONFIG&&window.APP_CONFIG.gasWebAppUrl)||"").trim();
       return isAllowedGasOrigin(url)?url:"";
     }
+    // GAS側は許可オリジンを複数持てるが、postMessageの送信先は1つに定まる必要がある。
+    // どのオリジンに返信すべきかをクエリで伝え、GAS側が許可リストと照合して採用する。
+    function withParentOrigin(url){const target=new URL(url);target.searchParams.set("parentOrigin",location.origin);return target.toString()}
     // HtmlServiceは二重iframeで配信されるため、送信元は iframe.contentWindow ではなく内側フレーム。
     // 直接参照できないので、オリジン許可リストと「自ページ配下のフレームか」で検証する。
     function isFrameOfThisPage(source){try{return !!source&&source!==window&&source.top===window.top}catch(_){return false}}

@@ -62,6 +62,36 @@ GAS側は`GITHUB_PAGES_ORIGIN`をスクリプトプロパティから読み、`d
 `postMessage`の`event.origin`はスキーム+ホスト+ポートのみで、完全一致で比較するためです。
 未設定の場合も同様にエラーとなり、原因がメッセージに表示されます。
 
+### 複数オリジンを許可する
+
+**カンマ区切り**で複数指定できます。本番とローカル確認を1つのGASデプロイで
+併用したい場合などに使います。前後の空白と重複は無視されます。
+
+```
+https://<ユーザー名>.github.io, http://localhost:8000
+```
+
+1つでも書式が不正な値が混ざっていると`doGet()`はエラーで停止します（フェイルクローズ）。
+
+#### 送信先が1つに定まる仕組み
+
+`postMessage`の送信先（`targetOrigin`）は1つしか指定できないため、許可リストが
+複数あるだけでは返信先を決められません。そこで**埋め込み元がクエリ`parentOrigin`で
+自分のオリジンを名乗り、GAS側が許可リストと照合して採用**します。
+
+```
+https://script.google.com/macros/s/xxxxx/exec?parentOrigin=https%3A%2F%2Fexample.github.io
+```
+
+- 付与するのは`github-pages/index.html`（`withParentOrigin()`）で、利用者の操作は不要です。
+- 名乗りが許可リストにない場合は採用せず、iframe内にエラーを表示します（フェイルクローズ）。
+- 名乗りがない場合は、許可リストが**1つのときのみ**それを採用します（従来どおりの動作）。
+
+**名乗りを詐称されても安全です。** 悪意あるページが他人のオリジンを名乗って
+このGAS画面を埋め込んでも、`targetOrigin`が実際の埋め込み元と一致しないため
+ブラウザが配送を拒否し、そのページにはデータが届きません。受信側の検証も
+従来どおり`event.origin`との完全一致で行うため、検証が緩くなることはありません。
+
 ### コードを変更したときは必ずバージョンを上げる
 
 `/exec`のURLは**デプロイ時点で固定されたバージョン**を配信します。エディタで
@@ -114,11 +144,15 @@ python3 -m http.server 8000 --directory github-pages
 
 注意点があります。
 
-- **この状態ではGAS側がメッセージを受け取りません。** GAS側は
+- **そのままではGAS側がメッセージを受け取りません。** GAS側は
   `GITHUB_PAGES_ORIGIN`との完全一致で送信元を検証するため、`http://localhost:8000`
-  からの`postMessage`は破棄されます。iframeの表示までは確認できますが、
-  読み取り結果の連携まで通すにはスクリプトプロパティを一時的に
-  `http://127.0.0.1:5500`等へ変更してください（`http`とポート付きも許容されます）。
+  からの`postMessage`は破棄されます。iframeの表示までは確認できますが、読み取り結果の
+  連携まで通すにはスクリプトプロパティへ**カンマ区切りで開発用オリジンを追加**します
+  （`http`とポート付きも許容されます）。本番用の値を消す必要はありません。
+
+  ```
+  https://<ユーザー名>.github.io, http://localhost:8000
+  ```
 
 ### 仕組み
 
@@ -128,8 +162,8 @@ python3 -m http.server 8000 --directory github-pages
 | `scripts/generate-config.mjs` | 環境変数または`.env`から`github-pages/config.js`を生成（依存パッケージなし） |
 | `github-pages/config.js` | 生成物（`.gitignore`済み）。`window.APP_CONFIG.gasWebAppUrl`を定義 |
 | `.github/workflows/deploy-pages.yml` | `vars.GAS_WEB_APP_URL`を渡して生成スクリプトを実行し、Pagesへデプロイ |
-| `github-pages/index.html` | `config.js`のURLを検証してからiframeの`src`に設定 |
-| `gas/Code.gs` | スクリプトプロパティ`GITHUB_PAGES_ORIGIN`を検証してテンプレートへ渡す。`APP_PASSWORD`を照合 |
+| `github-pages/index.html` | `config.js`のURLを検証し、`parentOrigin`を付けてiframeの`src`に設定 |
+| `gas/Code.gs` | `GITHUB_PAGES_ORIGIN`（カンマ区切り可）を検証し、`parentOrigin`と照合した1件をテンプレートへ渡す。`APP_PASSWORD`を照合 |
 | `gas/Index.html` | `<?!= JSON.stringify(allowedParentOrigin) ?>`で受け取り送信元を検証 |
 
 #### iframeの二重構造について
@@ -163,4 +197,5 @@ iframeへ設定します。未設定・不正な場合はiframeを読み込ま�
 | 「GASのWebアプリURLが設定されていません」 / `config.js`が404 | `config.js`が未生成 | ローカルは`node scripts/generate-config.mjs`、デプロイはリポジトリ変数`GAS_WEB_APP_URL`を確認 |
 | `パスワードが違います。` | 入力値と`APP_PASSWORD`の不一致 | スクリプトプロパティの値を確認 |
 | iframe内が401 / ログイン画面が出ない | アクセス権が「全員」以外 | デプロイ設定を「全員」に変更 |
+| iframe内に「このページを埋め込んでいるオリジンは許可されていません」 | 埋め込み元のオリジンが`GITHUB_PAGES_ORIGIN`の許可リストにない | 該当オリジンをカンマ区切りで追加（末尾スラッシュ・パスは不可） |
 | スキャンしても何も起きない | 親オリジンの不一致で`postMessage`が破棄されている | `GITHUB_PAGES_ORIGIN`が実際のオリジンと完全一致か確認 |
