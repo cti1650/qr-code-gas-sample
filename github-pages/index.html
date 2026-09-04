@@ -4,18 +4,58 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <title>QRコード読み取り</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.13.1/font/bootstrap-icons.min.css">
   <style>
     *{box-sizing:border-box}body{margin:0;background:#f7f7f8;color:#1b1b1f;font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif}
+    header{display:flex;justify-content:space-between;align-items:center;padding:12px 16px;background:#fff;border-bottom:1px solid #ddd}header h1{margin:0;font-size:18px}
+    #settings-button{padding:8px;border:0;background:0;cursor:pointer;color:#696e77;transition:color 0.2s;font-size:24px;display:flex;align-items:center;justify-content:center}#settings-button:hover{color:#1b1b1f}
     .scanner{padding:16px;background:#fff;border-bottom:1px solid #ddd}#qr-reader{display:none;width:100%;max-width:600px;margin:0 auto;overflow:hidden;border-radius:8px}.scanner.active #qr-reader{display:block}
     #password{display:block;width:min(600px,100%);margin:10px auto 0;padding:12px;border:1px solid #ddd;border-radius:8px;font-size:16px}
-    #status{max-width:600px;min-height:20px;margin:10px auto;color:#696e77;font-size:13px}#toggle{display:block;width:min(600px,100%);margin:0 auto;padding:12px;border:0;border-radius:8px;background:#4884da;color:#fff;font-size:16px;cursor:pointer}#toggle:disabled{opacity:.5;cursor:not-allowed}
+    #status{max-width:600px;min-height:20px;margin:10px auto;color:#696e77;font-size:13px}#toggle{display:block;width:min(600px,100%);margin:0 auto;padding:12px;border:0;border-radius:8px;background:#4884da;color:#fff;font-size:16px;cursor:pointer;font-weight:500}#toggle:disabled{opacity:.5;cursor:not-allowed}
     #gas-app{display:block;width:100%;height:400px;border:0}
+    #settings-modal{display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);z-index:1000;padding:16px}#settings-modal.open{display:flex;align-items:flex-end}
+    .settings-panel{background:#fff;border-radius:12px 12px 0 0;padding:20px;width:100%;max-width:600px;margin:0 auto}
+    .settings-panel h2{margin:0 0 20px;font-size:18px;font-weight:600}
+    .settings-item{margin-bottom:20px}
+    .settings-item label{display:block;margin-bottom:8px;font-size:14px;font-weight:500}
+    .settings-item input[type="password"]{display:block;width:100%;padding:12px;border:1px solid #ddd;border-radius:8px;font-size:16px;font-family:inherit}
+    .toggle-container{display:flex;align-items:center;justify-content:space-between}
+    .toggle-switch{position:relative;width:50px;height:28px;background:#ddd;border-radius:14px;cursor:pointer;transition:background 0.3s}
+    .toggle-switch.on{background:#4884da}
+    .toggle-switch::after{content:"";position:absolute;top:2px;left:2px;width:24px;height:24px;background:#fff;border-radius:50%;transition:left 0.3s}
+    .toggle-switch.on::after{left:24px}
+    .settings-close{text-align:right;margin-top:20px}
+    .settings-close button{padding:12px 24px;border:0;border-radius:8px;background:#f0f0f0;cursor:pointer;font-size:14px;font-weight:500}
   </style>
 </head>
 <body>
+  <header>
+    <h1>QRコード読み取り</h1>
+    <button id="settings-button" type="button" title="設定" aria-label="設定">
+      <i class="bi bi-gear"></i>
+    </button>
+  </header>
+  <div id="settings-modal">
+    <div class="settings-panel">
+      <h2>設定</h2>
+      <div class="settings-item">
+        <label for="settings-password">パスコード</label>
+        <input id="settings-password" type="password" placeholder="パスコード入力" enterkeyhint="done">
+      </div>
+      <div class="settings-item">
+        <div class="toggle-container">
+          <label for="continuous-mode">連続読み込みモード</label>
+          <div class="toggle-switch" id="continuous-toggle"></div>
+        </div>
+        <p style="margin:8px 0 0;font-size:12px;color:#696e77">読み取り成功後、3秒で自動的に再度読み込みを開始します</p>
+      </div>
+      <div class="settings-close">
+        <button type="button" onclick="closeSettings()">閉じる</button>
+      </div>
+    </div>
+  </div>
   <section id="scanner" class="scanner">
     <div id="qr-reader"></div>
-    <input id="password" type="password" placeholder="パスワード" autocomplete="current-password" enterkeyhint="done">
     <p id="status" role="status">表示画面を読み込んでいます…</p>
     <button id="toggle" type="button" disabled>QRスキャンを開始</button>
   </section>
@@ -25,25 +65,62 @@
   <script>
     "use strict";
     const MESSAGE_SOURCE="qr-code-sample",REQUIRED_MATCHES=3;
-    const iframe=document.getElementById("gas-app"),scannerElement=document.getElementById("scanner"),readerElement=document.getElementById("qr-reader"),passwordElement=document.getElementById("password"),toggleButton=document.getElementById("toggle"),statusElement=document.getElementById("status");
+    const iframe=document.getElementById("gas-app"),scannerElement=document.getElementById("scanner"),readerElement=document.getElementById("qr-reader"),toggleButton=document.getElementById("toggle"),statusElement=document.getElementById("status");
+    const settingsModal=document.getElementById("settings-modal"),settingsPassword=document.getElementById("settings-password"),continuousToggle=document.getElementById("continuous-toggle"),settingsButton=document.getElementById("settings-button");
     let qrScanner=null,scanning=false,starting=false,gasReady=false,gasOrigin=null,gasWindow=null,candidateValue="",matchCount=0,submitted=false;
-    // パスワードはタブを閉じるまで保持。localStorageと違い端末に残らない。
-    passwordElement.value=sessionStorage.getItem("qrPassword")||"";
-    passwordElement.addEventListener("input",()=>{sessionStorage.setItem("qrPassword",passwordElement.value);updateToggleState()});
+    let continuousMode=false,autoRestartTimer=null;
+    let successAudio=null,errorAudio=null; // 効果音
+
+    // 設定の読み込みと初期化
+    function loadSettings(){
+      continuousMode=sessionStorage.getItem("continuousMode")==="true";
+      settingsPassword.value=sessionStorage.getItem("qrPassword")||"";
+      updateContinuousToggle();
+    }
+    function saveSettings(){
+      sessionStorage.setItem("qrPassword",settingsPassword.value);
+      sessionStorage.setItem("continuousMode",continuousMode);
+    }
+    function updateContinuousToggle(){
+      if(continuousMode)continuousToggle.classList.add("on");else continuousToggle.classList.remove("on");
+    }
+
+    // モーダル制御
+    settingsButton.addEventListener("click",()=>settingsModal.classList.add("open"));
+    function closeSettings(){settingsModal.classList.remove("open");saveSettings();toggleButton.focus()}
+    settingsModal.addEventListener("click",e=>{if(e.target===settingsModal)closeSettings()});
+    continuousToggle.addEventListener("click",()=>{continuousMode=!continuousMode;updateContinuousToggle()});
+    settingsPassword.addEventListener("change",saveSettings);
+
+    loadSettings();
+    // 効果音を初期化（最初の再生時にブラウザのオートプレイ制限に引っかかることを避ける）
+    successAudio=new Audio("audio/success.mp3");
+    errorAudio=new Audio("audio/error.mp3");
     const gasWebAppUrl=resolveGasWebAppUrl();
     if(gasWebAppUrl)iframe.src=withParentOrigin(gasWebAppUrl);
     else statusElement.textContent="GASのWebアプリURLが設定されていません。";
+
     window.addEventListener("message",event=>{
       if(!isAllowedGasOrigin(event.origin)||!isFrameOfThisPage(event.source))return;
       const message=event.data;if(!message||message.source!==MESSAGE_SOURCE)return;
-      if(message.type==="GAS_READY"){gasOrigin=event.origin;gasWindow=event.source;gasReady=true;updateToggleState();statusElement.textContent=passwordElement.value?"QRスキャンを開始できます。":"パスワードを入力してください。"}
-      if(message.type==="QR_RESULT")statusElement.textContent=message.ok?"GASで受信しました。":message.message||"処理に失敗しました。";
+      if(message.type==="GAS_READY"){gasOrigin=event.origin;gasWindow=event.source;gasReady=true;updateToggleState();statusElement.textContent=settingsPassword.value?"QRスキャンを開始できます。":"パスワードを入力してください。"}
+      if(message.type==="QR_RESULT"){
+        const isOk=message.ok;
+        statusElement.textContent=isOk?"GASで受信しました。":message.message||"処理に失敗しました。";
+        playFeedbackSoundEffect(isOk);
+        if(isOk&&continuousMode&&scanning){
+          clearTimeout(autoRestartTimer);
+          autoRestartTimer=setTimeout(()=>{if(scanning)startScanning()},3000);
+          statusElement.textContent="GASで受信しました。（3秒後に再開します…）";
+        }else{
+          stopScanning(true);
+        }
+      }
     });
     toggleButton.addEventListener("click",()=>scanning?stopScanning():startScanning());
-    // start()はカメラ起動の完了まで待つため、その間の二度押しで
-    // 同じ要素へ2つ目のインスタンスが描画されないよう starting で門番する。
+
     async function startScanning(){
-      if(!gasOrigin||!gasWindow||!passwordElement.value||qrScanner||starting)return;
+      if(!gasOrigin||!gasWindow||!settingsPassword.value||qrScanner||starting)return;
       starting=true;toggleButton.disabled=true;
       candidateValue="";matchCount=0;submitted=false;
       readerElement.replaceChildren();
@@ -60,10 +137,11 @@
         statusElement.textContent="カメラを起動できませんでした: "+String(error);
       }finally{starting=false;updateToggleState()}
     }
-    // 参照を先に手放して再入時は即return。stop()が要素を残した場合に備え最後にDOMを空にする。
+
     async function stopScanning(keepStatus){
       const scanner=qrScanner;if(!scanner)return;
       qrScanner=null;scanning=false;
+      clearTimeout(autoRestartTimer);
       try{await scanner.stop()}catch(_){}
       try{scanner.clear()}catch(_){}
       readerElement.replaceChildren();
@@ -72,27 +150,30 @@
       updateToggleState();
       if(!keepStatus)statusElement.textContent="QRスキャンを停止しました。";
     }
-    // 同じ値を REQUIRED_MATCHES 回連続で検知したら1度だけ送信してスキャンを止める。
-    // 違う値を検知したらカウントをやり直す（誤読の取りこぼし防止）。
+
     function handleScan(decodedText){
       if(submitted)return;
       if(decodedText===candidateValue)matchCount++;else{candidateValue=decodedText;matchCount=1}
       if(matchCount<REQUIRED_MATCHES){statusElement.textContent="読み取り確認中… ("+matchCount+"/"+REQUIRED_MATCHES+")";return}
       submitted=true;
-      gasWindow.postMessage({source:MESSAGE_SOURCE,type:"QR_SCANNED",payload:{text:decodedText,password:passwordElement.value}},gasOrigin);
+      gasWindow.postMessage({source:MESSAGE_SOURCE,type:"QR_SCANNED",payload:{text:decodedText,password:settingsPassword.value}},gasOrigin);
       statusElement.textContent="GASへ送信しています…";
-      setTimeout(()=>stopScanning(true),0); // スキャンループの外へ出してから停止する
+      setTimeout(()=>stopScanning(true),0);
     }
-    function updateToggleState(){toggleButton.disabled=!gasReady||starting||(!scanning&&!passwordElement.value)}
+
+    function updateToggleState(){toggleButton.disabled=!gasReady||starting||(!scanning&&!settingsPassword.value)}
+
+    function playFeedbackSoundEffect(isOk){
+      const audio=isOk?successAudio:errorAudio;
+      audio.currentTime=0; // 最初から再生
+      audio.play().catch(e=>console.log("効果音再生失敗:",e.message));
+    }
+
     function resolveGasWebAppUrl(){
       const url=String((window.APP_CONFIG&&window.APP_CONFIG.gasWebAppUrl)||"").trim();
       return isAllowedGasOrigin(url)?url:"";
     }
-    // GAS側は許可オリジンを複数持てるが、postMessageの送信先は1つに定まる必要がある。
-    // どのオリジンに返信すべきかをクエリで伝え、GAS側が許可リストと照合して採用する。
     function withParentOrigin(url){const target=new URL(url);target.searchParams.set("parentOrigin",location.origin);return target.toString()}
-    // HtmlServiceは二重iframeで配信されるため、送信元は iframe.contentWindow ではなく内側フレーム。
-    // 直接参照できないので、オリジン許可リストと「自ページ配下のフレームか」で検証する。
     function isFrameOfThisPage(source){try{return !!source&&source!==window&&source.top===window.top}catch(_){return false}}
     function isAllowedGasOrigin(origin){try{const url=new URL(origin);return url.protocol==="https:"&&(url.hostname==="script.google.com"||url.hostname==="script.googleusercontent.com"||url.hostname.endsWith(".googleusercontent.com"))}catch(_){return false}}
   </script>
