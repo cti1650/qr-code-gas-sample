@@ -71,7 +71,6 @@
     const settingsModal=document.getElementById("settings-modal"),settingsPassword=document.getElementById("settings-password"),continuousToggle=document.getElementById("continuous-toggle"),settingsButton=document.getElementById("settings-button");
     let qrScanner=null,scanning=false,starting=false,gasReady=false,gasOrigin=null,gasWindow=null,candidateValue="",matchCount=0,submitted=false;
     let continuousMode=false,autoRestartTimer=null;
-    let successAudio=null,errorAudio=null; // 効果音
 
     // 設定の読み込みと初期化
     function loadSettings(){
@@ -95,9 +94,6 @@
     settingsPassword.addEventListener("change",saveSettings);
 
     loadSettings();
-    // 効果音を初期化（最初の再生時にブラウザのオートプレイ制限に引っかかることを避ける）
-    successAudio=new Audio("audio/success.mp3");
-    errorAudio=new Audio("audio/error.mp3");
     const gasWebAppUrl=resolveGasWebAppUrl();
     if(gasWebAppUrl)iframe.src=withParentOrigin(gasWebAppUrl);
     else statusElement.textContent="GASのWebアプリURLが設定されていません。";
@@ -181,11 +177,47 @@ Continuous: ${continuousMode}<br>
 Button Disabled: ${toggleButton.disabled}`;
     }
 
-    function playFeedbackSoundEffect(isOk){
-      const audio=isOk?successAudio:errorAudio;
-      audio.currentTime=0; // 最初から再生
-      audio.play().catch(e=>console.log("効果音再生失敗:",e.message));
-    }
+    // 効果音再生（改善版：オブジェクトプール + フォールバック）
+    (function(){
+      const audioPool={success:[],error:[]};
+      function initPool(name,url,size=2){
+        audioPool[name]=[];
+        for(let i=0;i<size;i++){
+          const a=new Audio(url);a.preload="auto";
+          audioPool[name].push({audio:a,playing:false});
+        }
+      }
+      function getAvailable(name){
+        const pool=audioPool[name];
+        if(!pool||!pool.length)return null;
+        let item=pool.find(it=>!it.playing&&it.audio.paused);
+        if(!item)item=pool[0];
+        return item;
+      }
+      window.playFeedbackSoundEffect=function(isOk){
+        const name=isOk?"success":"error";
+        const item=getAvailable(name);
+        if(!item)return;
+        const {audio}=item;
+        audio.volume=0.8;audio.currentTime=0;
+        item.playing=true;
+        audio.onended=()=>{item.playing=false;};
+        const p=audio.play();
+        if(p?.catch){
+          p.catch(e=>{
+            item.playing=false;
+            if(navigator.vibrate)navigator.vibrate(isOk?[100,50,100]:[200,50,200]);
+          });
+        }
+      };
+      window.initializeAudioPool=function(){
+        initPool("success","audio/success.mp3",2);
+        initPool("error","audio/error.mp3",2);
+      };
+      const initOnce=()=>{window.initializeAudioPool();document.removeEventListener("click",initOnce);};
+      if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",()=>document.addEventListener("click",initOnce,{once:true}));
+      else document.addEventListener("click",initOnce,{once:true});
+    })();
 
     function resolveGasWebAppUrl(){
       const url=String((window.APP_CONFIG&&window.APP_CONFIG.gasWebAppUrl)||"").trim();
