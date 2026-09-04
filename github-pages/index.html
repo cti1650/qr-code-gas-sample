@@ -107,18 +107,20 @@
       if(message.type==="QR_RESULT"){
         const isOk=message.ok;
         statusElement.textContent=isOk?"GASで受信しました。":message.message||"処理に失敗しました。";
-        playFeedbackSoundEffect(isOk);
         if(!isOk){
           // エラーの場合は停止
+          playFeedbackSoundEffect(isOk);
           stopScanning(true);
         }else if(continuousMode){
-          // 成功かつ連続モード ON なら、一度停止してから再開
+          // 成功かつ連続モード ON なら、音再生 → 停止 → 再開
+          playFeedbackSoundEffect(isOk);
           stopScanning(true);
           clearTimeout(autoRestartTimer);
           autoRestartTimer=setTimeout(()=>{if(!scanning)startScanning()},3000);
           statusElement.textContent="GASで受信しました。（3秒後に再開します…）";
         }else{
           // 成功だけど連続モード OFF なら停止
+          playFeedbackSoundEffect(isOk);
           stopScanning(true);
         }
       }
