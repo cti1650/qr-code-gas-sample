@@ -111,12 +111,13 @@
         if(!isOk){
           // エラーの場合は停止
           stopScanning(true);
-        }else if(continuousMode&&scanning){
-          // 成功かつ連続モード ON なら再開
+        }else if(continuousMode){
+          // 成功かつ連続モード ON なら、一度停止してから再開
+          stopScanning(true);
           clearTimeout(autoRestartTimer);
-          autoRestartTimer=setTimeout(()=>{if(scanning)handleScanReset()},3000);
+          autoRestartTimer=setTimeout(()=>{if(!scanning)startScanning()},3000);
           statusElement.textContent="GASで受信しました。（3秒後に再開します…）";
-        }else if(scanning){
+        }else{
           // 成功だけど連続モード OFF なら停止
           stopScanning(true);
         }
@@ -163,13 +164,6 @@
       submitted=true;
       gasWindow.postMessage({source:MESSAGE_SOURCE,type:"QR_SCANNED",payload:{text:decodedText,password:settingsPassword.value}},gasOrigin);
       statusElement.textContent="GASへ送信しています…";
-    }
-    function handleScanReset(){
-      // 連続読み込み時に submitted フラグをリセット
-      submitted=false;
-      candidateValue="";
-      matchCount=0;
-      statusElement.textContent="QRコードをカメラに映してください。";
     }
 
     function updateToggleState(){toggleButton.disabled=!gasReady||starting||(!scanning&&!settingsPassword.value)}
