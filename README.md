@@ -75,9 +75,18 @@ GAS側は`GITHUB_PAGES_ORIGIN`をスクリプトプロパティから読み、`d
 ## GAS WebアプリURLの設定（GitHub Pages側）
 
 GitHub Pagesは静的ホスティングのため実行時の環境変数を持てません。そのため
-**デプロイ時にリポジトリ変数の値を`github-pages/config.js`へ埋め込む**方式にしています。
+**配信前に`github-pages/config.js`を生成して値を埋め込む**方式にしています。
 
-### 設定手順
+生成は`scripts/generate-config.mjs`（Node.js標準機能のみ、依存パッケージなし）が行い、
+値は次の優先順で解決します。
+
+1. 環境変数`GAS_WEB_APP_URL`（GitHub Actionsではリポジトリ変数の値が入ります）
+2. リポジトリ直下の`.env`の`GAS_WEB_APP_URL`
+
+未設定の場合、および`https://script.google.com/...`以外のURLの場合はエラーで停止します。
+`github-pages/config.js`は生成物のため`.gitignore`済みです（直接編集しないでください）。
+
+### 設定手順（デプロイ）
 
 1. リポジトリの **Settings > Secrets and variables > Actions > Variables** で
    `GAS_WEB_APP_URL` を作成し、GASのWebアプリURL
@@ -92,18 +101,19 @@ Variablesを使うのはこのためです。
 
 ### ローカルでの動作確認
 
-`github-pages/config.js`の`gasWebAppUrl`を直接書き換えてから、`github-pages/`を
-静的サーバで配信してください。
+`.env`を用意して`config.js`を生成し、`github-pages/`を静的サーバで配信します。
 
 ```sh
+cp .env.example .env
+# .env の GAS_WEB_APP_URL を実際のURLに書き換える
+node scripts/generate-config.mjs
 python3 -m http.server 8000 --directory github-pages
 ```
 
-注意点が2つあります。
+`.env`と生成された`config.js`はどちらも`.gitignore`済みのため、コミットされません。
 
-- **書き換えた`config.js`はコミットしないでください。** プレースホルダ
-  `__GAS_WEB_APP_URL__`が消えた状態でpushすると、ワークフローの置換ステップが
-  「プレースホルダが見つかりません」で失敗します。
+注意点があります。
+
 - **この状態ではGAS側がメッセージを受け取りません。** GAS側は
   `GITHUB_PAGES_ORIGIN`との完全一致で送信元を検証するため、`http://localhost:8000`
   からの`postMessage`は破棄されます。iframeの表示までは確認できますが、
@@ -114,8 +124,10 @@ python3 -m http.server 8000 --directory github-pages
 
 | ファイル | 役割 |
 | --- | --- |
-| `github-pages/config.js` | `window.APP_CONFIG.gasWebAppUrl`を定義。既定値はプレースホルダ`__GAS_WEB_APP_URL__` |
-| `.github/workflows/deploy-pages.yml` | プレースホルダを`vars.GAS_WEB_APP_URL`へ置換してPagesへデプロイ |
+| `.env` / `.env.example` | ローカル用の`GAS_WEB_APP_URL`。`.env`はコミットしない |
+| `scripts/generate-config.mjs` | 環境変数または`.env`から`github-pages/config.js`を生成（依存パッケージなし） |
+| `github-pages/config.js` | 生成物（`.gitignore`済み）。`window.APP_CONFIG.gasWebAppUrl`を定義 |
+| `.github/workflows/deploy-pages.yml` | `vars.GAS_WEB_APP_URL`を渡して生成スクリプトを実行し、Pagesへデプロイ |
 | `github-pages/index.html` | `config.js`のURLを検証してからiframeの`src`に設定 |
 | `gas/Code.gs` | スクリプトプロパティ`GITHUB_PAGES_ORIGIN`を検証してテンプレートへ渡す。`APP_PASSWORD`を照合 |
 | `gas/Index.html` | `<?!= JSON.stringify(allowedParentOrigin) ?>`で受け取り送信元を検証 |
@@ -148,7 +160,7 @@ iframeへ設定します。未設定・不正な場合はiframeを読み込ま�
 | `The target origin provided ('...') does not match the recipient window's origin ('https://...googleusercontent.com')` | `window.parent`が中間フレームを指している（二重iframe） | 最新の`gas/Index.html`を反映してバージョンを上げる |
 | `Unexpected token '<'` | 新`Index.html`に対し`Code.gs`が旧いまま（スクリプトレット未評価） | `Code.gs`も更新してバージョンを上げる |
 | iframeにGASのエラーページが出る | スクリプトプロパティが未設定または書式不正 | エラーページの本文に原因が表示されます |
-| 「GASのWebアプリURLが設定されていません」 | `config.js`が未置換、またはURLが`script.google.com`以外 | リポジトリ変数`GAS_WEB_APP_URL`を確認 |
+| 「GASのWebアプリURLが設定されていません」 / `config.js`が404 | `config.js`が未生成 | ローカルは`node scripts/generate-config.mjs`、デプロイはリポジトリ変数`GAS_WEB_APP_URL`を確認 |
 | `パスワードが違います。` | 入力値と`APP_PASSWORD`の不一致 | スクリプトプロパティの値を確認 |
 | iframe内が401 / ログイン画面が出ない | アクセス権が「全員」以外 | デプロイ設定を「全員」に変更 |
 | スキャンしても何も起きない | 親オリジンの不一致で`postMessage`が破棄されている | `GITHUB_PAGES_ORIGIN`が実際のオリジンと完全一致か確認 |

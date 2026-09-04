@@ -32,7 +32,7 @@
     passwordElement.addEventListener("input",()=>{sessionStorage.setItem("qrPassword",passwordElement.value);updateToggleState()});
     const gasWebAppUrl=resolveGasWebAppUrl();
     if(gasWebAppUrl)iframe.src=gasWebAppUrl;
-    else statusElement.textContent="GASのWebアプリURLが設定されていません。config.js の gasWebAppUrl を設定してください。";
+    else statusElement.textContent="GASのWebアプリURLが設定されていません。";
     window.addEventListener("message",event=>{
       if(!isAllowedGasOrigin(event.origin)||!isFrameOfThisPage(event.source))return;
       const message=event.data;if(!message||message.source!==MESSAGE_SOURCE)return;
@@ -86,7 +86,6 @@
     function updateToggleState(){toggleButton.disabled=!gasReady||starting||(!scanning&&!passwordElement.value)}
     function resolveGasWebAppUrl(){
       const url=String((window.APP_CONFIG&&window.APP_CONFIG.gasWebAppUrl)||"").trim();
-      if(!url||url.indexOf("__")===0)return "";
       return isAllowedGasOrigin(url)?url:"";
     }
     // HtmlServiceは二重iframeで配信されるため、送信元は iframe.contentWindow ではなく内側フレーム。
