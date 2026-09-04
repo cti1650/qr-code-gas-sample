@@ -133,7 +133,7 @@
       scannerElement.classList.add("active");
       const scanner=new Html5Qrcode("qr-reader");
       try{
-        await scanner.start({facingMode:"environment"},{fps:10,qrbox:{width:250,height:250},advanced:[{autoFocus:true}]},handleScan,()=>{});
+        await scanner.start({facingMode:"environment"},{fps:10,qrbox:{width:250,height:250},advanced:[{autoFocus:true,focusMode:"continuous"}]},handleScan,()=>{});
         qrScanner=scanner;scanning=true;
         toggleButton.textContent="QRスキャンを停止";statusElement.textContent="QRコードをカメラに映してください。";
       }catch(error){
