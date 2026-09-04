@@ -89,7 +89,7 @@
     settingsButton.addEventListener("click",()=>settingsModal.classList.add("open"));
     function closeSettings(){settingsModal.classList.remove("open");saveSettings();toggleButton.focus()}
     settingsModal.addEventListener("click",e=>{if(e.target===settingsModal)closeSettings()});
-    continuousToggle.addEventListener("click",()=>{continuousMode=!continuousMode;updateContinuousToggle()});
+    continuousToggle.addEventListener("click",()=>{continuousMode=!continuousMode;updateContinuousToggle();saveSettings()});
     settingsPassword.addEventListener("change",saveSettings);
 
     loadSettings();
