@@ -26,7 +26,7 @@ QRコードをカメラで読み取り、Google Apps Script で処理・表示�
 | テスト | QRコード | 期待する動作 |
 |--------|---------|-----------|
 | **成功時** | ![SUCCESS-QR](assets/images/success-qr.png) | 決定音（ピコッ） |
-| **失敗時** | ![ERROR-QR](assets/images/error-qr.png) | キャンセル音（ピュッ） |
+| **失敗時** | ![ERROR-QR](assets/images/error-qr.png) | キャンセル音（ピピピッ） |
 
 エラーテスト用QRコード（下）に「ERROR-TEST」というテキストが入っており、これを読み取るとエラーが発生します。
 
