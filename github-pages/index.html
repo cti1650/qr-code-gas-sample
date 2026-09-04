@@ -21,6 +21,7 @@
     .settings-item input[type="password"]{display:block;width:100%;padding:12px;border:1px solid #ddd;border-radius:8px;font-size:16px;font-family:inherit}
     .toggle-container{display:flex;align-items:center;justify-content:space-between}
     .toggle-switch{position:relative;width:50px;height:28px;background:#ddd;border-radius:14px;cursor:pointer;transition:background 0.3s}
+    #debug-info{font-size:12px;color:#696e77;background:#fafafa;padding:8px;border-radius:4px;margin-top:12px;font-family:monospace}
     .toggle-switch.on{background:#4884da}
     .toggle-switch::after{content:"";position:absolute;top:2px;left:2px;width:24px;height:24px;background:#fff;border-radius:50%;transition:left 0.3s}
     .toggle-switch.on::after{left:24px}
@@ -49,6 +50,7 @@
         </div>
         <p style="margin:8px 0 0;font-size:12px;color:#696e77">読み取り成功後、3秒で自動的に再度読み込みを開始します</p>
       </div>
+      <div id="debug-info"></div>
       <div class="settings-close">
         <button type="button" onclick="closeSettings()">閉じる</button>
       </div>
@@ -86,7 +88,7 @@
     }
 
     // モーダル制御
-    settingsButton.addEventListener("click",()=>settingsModal.classList.add("open"));
+    settingsButton.addEventListener("click",()=>{settingsModal.classList.add("open");updateDebugInfo()});
     function closeSettings(){settingsModal.classList.remove("open");saveSettings();toggleButton.focus()}
     settingsModal.addEventListener("click",e=>{if(e.target===settingsModal)closeSettings()});
     continuousToggle.addEventListener("click",()=>{continuousMode=!continuousMode;updateContinuousToggle();saveSettings()});
@@ -169,6 +171,15 @@
     }
 
     function updateToggleState(){toggleButton.disabled=!gasReady||starting||(!scanning&&!settingsPassword.value)}
+    function updateDebugInfo(){
+      const debugEl=document.getElementById("debug-info");
+      debugEl.innerHTML=`<strong>Debug Info:</strong><br>
+GAS Ready: ${gasReady}<br>
+Scanning: ${scanning}<br>
+Password: ${settingsPassword.value?"●●●●●●":"(未入力)"}<br>
+Continuous: ${continuousMode}<br>
+Button Disabled: ${toggleButton.disabled}`;
+    }
 
     function playFeedbackSoundEffect(isOk){
       const audio=isOk?successAudio:errorAudio;
