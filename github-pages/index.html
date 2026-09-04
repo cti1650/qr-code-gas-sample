@@ -108,11 +108,16 @@
         const isOk=message.ok;
         statusElement.textContent=isOk?"GASで受信しました。":message.message||"処理に失敗しました。";
         playFeedbackSoundEffect(isOk);
-        if(isOk&&continuousMode&&scanning){
+        if(!isOk){
+          // エラーの場合は停止
+          stopScanning(true);
+        }else if(continuousMode&&scanning){
+          // 成功かつ連続モード ON なら再開
           clearTimeout(autoRestartTimer);
-          autoRestartTimer=setTimeout(()=>{if(scanning)startScanning()},3000);
+          autoRestartTimer=setTimeout(()=>{if(scanning)handleScanReset()},3000);
           statusElement.textContent="GASで受信しました。（3秒後に再開します…）";
-        }else{
+        }else if(scanning){
+          // 成功だけど連続モード OFF なら停止
           stopScanning(true);
         }
       }
@@ -127,7 +132,7 @@
       scannerElement.classList.add("active");
       const scanner=new Html5Qrcode("qr-reader");
       try{
-        await scanner.start({facingMode:"environment"},{fps:10,qrbox:{width:250,height:250}},handleScan,()=>{});
+        await scanner.start({facingMode:"environment"},{fps:10,qrbox:{width:250,height:250},advanced:[{autoFocus:true}]},handleScan,()=>{});
         qrScanner=scanner;scanning=true;
         toggleButton.textContent="QRスキャンを停止";statusElement.textContent="QRコードをカメラに映してください。";
       }catch(error){
@@ -158,7 +163,13 @@
       submitted=true;
       gasWindow.postMessage({source:MESSAGE_SOURCE,type:"QR_SCANNED",payload:{text:decodedText,password:settingsPassword.value}},gasOrigin);
       statusElement.textContent="GASへ送信しています…";
-      setTimeout(()=>stopScanning(true),0);
+    }
+    function handleScanReset(){
+      // 連続読み込み時に submitted フラグをリセット
+      submitted=false;
+      candidateValue="";
+      matchCount=0;
+      statusElement.textContent="QRコードをカメラに映してください。";
     }
 
     function updateToggleState(){toggleButton.disabled=!gasReady||starting||(!scanning&&!settingsPassword.value)}
